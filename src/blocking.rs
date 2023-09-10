@@ -152,7 +152,7 @@ impl<R: Read, W: Write> IpcStream<R, W> {
         read_stream!(self, read_to_string, String)
     }
 
-    gen_int_rw! {u64 u32 u16 u8 usize}
+    gen_int_rw! {u64 u32 u16 u8 usize i64 i32 i16 i8 isize}
     gen_float_rw! {f64 u64 f32 u32}
 }
 
