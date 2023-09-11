@@ -174,6 +174,7 @@ impl<R: Read, W: Write> Write for IpcStream<R, W> {
 }
 
 impl IpcStream<BufReader<StdinLock<'static>>, BufWriter<StdoutLock<'static>>> {
+    #[inline]
     pub fn parent_stream() -> Self {
         Self {
             input_stream:  BufReader::new(std::io::stdin().lock() ),
@@ -183,6 +184,7 @@ impl IpcStream<BufReader<StdinLock<'static>>, BufWriter<StdoutLock<'static>>> {
 }
 
 impl IpcStream<BufReader<ChildStdout>, BufWriter<ChildStdin>> {
+    #[inline]
     pub fn connect_to_child(child: &mut Child<>) -> Option<Self> {
         Some(Self {
             input_stream : BufReader::new(child.stdout.take()?),

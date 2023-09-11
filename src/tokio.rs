@@ -170,6 +170,7 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> IpcStream<R, W> {
 }
 
 impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncRead for IpcStream<R, W> {
+    #[inline(always)]
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -180,6 +181,7 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncRead for IpcStream<
 }
 
 impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncWrite for IpcStream<R, W> {
+    #[inline(always)]
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -188,14 +190,17 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncWrite for IpcStream
         Pin::new(&mut self.output_stream).poll_write(cx, buf)
     }
 
+    #[inline(always)]
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         Pin::new(&mut self.output_stream).poll_flush(cx)
     }
 
+    #[inline(always)]
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         Pin::new(&mut self.output_stream).poll_shutdown(cx)
     }
 
+    #[inline(always)]
     fn poll_write_vectored(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -204,12 +209,14 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncWrite for IpcStream
         Pin::new(&mut self.output_stream).poll_write_vectored(cx, bufs)
     }
 
+    #[inline(always)]
     fn is_write_vectored(&self) -> bool {
         self.output_stream.is_write_vectored()
     }
 }
 
 impl IpcStream<BufReader<Stdin>, BufWriter<Stdout>> {
+    #[inline]
     pub fn parent_stream() -> Self {
         Self {
             input_stream:  BufReader::new(tokio::io::stdin() ),
@@ -218,6 +225,7 @@ impl IpcStream<BufReader<Stdin>, BufWriter<Stdout>> {
     }
 }
 impl IpcStream<BufReader<ChildStdout>, BufWriter<ChildStdin>> {
+    #[inline]
     pub fn connect_to_child(child: &mut Child) -> Option<Self> {
         Some(Self {
             input_stream:  BufReader::new(child.stdout.take()?),
