@@ -1,6 +1,6 @@
 [package]
 name = "ilgda-ipc"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = ["NightMare-Vortex"]
 description = "IPC standard used for ilgda"
