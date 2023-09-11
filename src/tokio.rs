@@ -21,6 +21,7 @@ use tokio::{
         ChildStdin,
     }
 };
+use tokio::io::{BufReader, BufWriter};
 
 pub struct IpcStream<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> {
     input_stream: R,
@@ -164,7 +165,7 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> IpcStream<R, W> {
         read_stream!(self, read_to_string, String)
     }
 
-    gen_int_rw! {u64 u32 u16 u8 usize}
+    gen_int_rw! {u64 u32 u16 u8 usize i64 i32 i16 i8 isize}
     gen_float_rw! {f64 u64 f32 u32}
 }
 
@@ -208,19 +209,19 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncWrite for IpcStream
     }
 }
 
-impl IpcStream<Stdin, Stdout> {
+impl IpcStream<BufReader<Stdin>, BufWriter<Stdout>> {
     pub fn parent_stream() -> Self {
         Self {
-            input_stream: tokio::io::stdin(),
-            output_stream: tokio::io::stdout()
+            input_stream:  BufReader::new(tokio::io::stdin() ),
+            output_stream: BufWriter::new(tokio::io::stdout())
         }
     }
 }
-impl IpcStream<ChildStdout, ChildStdin> {
+impl IpcStream<BufReader<ChildStdout>, BufWriter<ChildStdin>> {
     pub fn connect_to_child(child: &mut Child) -> Option<Self> {
         Some(Self {
-            input_stream: child.stdout.take()?,
-            output_stream: child.stdin.take()?
+            input_stream:  BufReader::new(child.stdout.take()?),
+            output_stream: BufWriter::new(child.stdin .take()?)
         })
     }
 }

@@ -4,11 +4,11 @@ use std::{
         Error as IoError,
         ErrorKind as IoErrorKind,
         Read, Write,
-        StdinLock, StdoutLock
+        StdinLock, StdoutLock,
+        BufReader, BufWriter
     },
     process::{Child, ChildStdin, ChildStdout}
 };
-
 
 pub struct IpcStream<R: Read, W: Write> {
     input_stream: R,
@@ -173,20 +173,20 @@ impl<R: Read, W: Write> Write for IpcStream<R, W> {
     }
 }
 
-impl IpcStream<StdinLock<'static>, StdoutLock<'static>> {
+impl IpcStream<BufReader<StdinLock<'static>>, BufWriter<StdoutLock<'static>>> {
     pub fn parent_stream() -> Self {
         Self {
-            input_stream: std::io::stdin().lock(),
-            output_stream: std::io::stdout().lock()
+            input_stream:  BufReader::new(std::io::stdin().lock() ),
+            output_stream: BufWriter::new(std::io::stdout().lock())
         }
     }
 }
 
-impl IpcStream<ChildStdout, ChildStdin> {
-    pub fn connect_to_std_child(child: &mut Child) -> Option<Self> {
+impl IpcStream<BufReader<ChildStdout>, BufWriter<ChildStdin>> {
+    pub fn connect_to_child(child: &mut Child<>) -> Option<Self> {
         Some(Self {
-            input_stream: child.stdout.take()?,
-            output_stream: child.stdin.take()?
+            input_stream : BufReader::new(child.stdout.take()?),
+            output_stream: BufWriter::new(child.stdin.take()? )
         })
     }
 }
