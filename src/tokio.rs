@@ -21,17 +21,17 @@ use tokio::{
         ChildStdin,
     }
 };
-use tokio::io::{BufReader, BufWriter};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader, BufWriter};
 
 pub struct IpcStream<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> {
-    input_stream: R,
-    output_stream: W,
+    input_stream: BufReader<R>,
+    output_stream: BufWriter<W>,
 }
 
 macro_rules! gen_int_rw {
     ($($r#type: ident)*) => {
-        $(
-        paste::paste! {
+        paste::paste! {$(
+
         #[doc = concat!("writes a ", stringify!($r#type), " in native-endian order to the underlying writer")]
         #[inline(always)]
         pub async fn [<write_ $r#type>](&mut self, val: $r#type) -> Result<()> {
@@ -68,15 +68,12 @@ macro_rules! gen_int_rw {
             self.input_stream.read_exact(&mut buff).await?;
             Ok($r#type::from_le_bytes(buff))
         }
-        }
-        )*
+        )*}
     };
 }
 macro_rules! gen_float_rw {
     ($($r#type: ident $bits_type: ident)*) => {
-        $(
-        paste::paste! {
-
+        paste::paste! {$(
         #[doc = concat!("writes a ", stringify!($r#type), " in native-endian order to the underlying writer")]
         #[inline(always)]
         pub async fn [<write_ $r#type>](&mut self, val: $r#type) -> Result<()> {
@@ -119,8 +116,7 @@ macro_rules! gen_float_rw {
             self.input_stream.read_exact(&mut buff).await?;
             Ok($r#type::from_bits($bits_type::from_le_bytes(buff)))
         }
-        }
-        )*
+        )*}
     };
 }
 macro_rules! read_stream {
@@ -215,7 +211,17 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncWrite for IpcStream
     }
 }
 
-impl IpcStream<BufReader<Stdin>, BufWriter<Stdout>> {
+impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncBufRead for IpcStream<R, W> {
+    fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<&[u8]>> {
+        Pin::new(&mut self.input_stream).poll_fill_buf(cx)
+    }
+
+    fn consume(self: Pin<&mut Self>, amt: usize) {
+        Pin::new(&mut self.input_stream).consume(amt)
+    }
+}
+
+impl IpcStream<Stdin, Stdout> {
     #[inline]
     pub fn parent_stream() -> Self {
         Self {
@@ -224,7 +230,7 @@ impl IpcStream<BufReader<Stdin>, BufWriter<Stdout>> {
         }
     }
 }
-impl IpcStream<BufReader<ChildStdout>, BufWriter<ChildStdin>> {
+impl IpcStream<ChildStdout, ChildStdin> {
     #[inline]
     pub fn connect_to_child(child: &mut Child) -> Option<Self> {
         Some(Self {

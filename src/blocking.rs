@@ -9,17 +9,17 @@ use std::{
     },
     process::{Child, ChildStdin, ChildStdout}
 };
+use std::io::BufRead;
 
 pub struct IpcStream<R: Read, W: Write> {
-    input_stream: R,
-    output_stream: W,
+    input_stream: BufReader<R>,
+    output_stream: BufWriter<W>,
 }
 
 
 macro_rules! gen_int_rw {
     ($($r#type: ident)*) => {
-        $(
-        paste::paste! {
+        paste::paste! {$(
         #[doc = concat!("writes a ", stringify!($r#type), " in native-endian order to the underlying writer")]
         #[inline(always)]
         pub fn [<write_ $r#type>](&mut self, val: $r#type) -> Result<()> {
@@ -56,14 +56,12 @@ macro_rules! gen_int_rw {
             self.input_stream.read_exact(&mut buff)?;
             Ok($r#type::from_le_bytes(buff))
         }
-        }
-        )*
+        )*}
     };
 }
 macro_rules! gen_float_rw {
     ($($r#type: ident $bits_type: ident)*) => {
-        $(
-        paste::paste! {
+        paste::paste! {$(
         #[doc = concat!("writes a ", stringify!($r#type), " in native-endian order to the underlying writer")]
         #[inline(always)]
         pub fn [<write_ $r#type>](&mut self, val: $r#type) -> Result<()> {
@@ -106,8 +104,7 @@ macro_rules! gen_float_rw {
             self.input_stream.read_exact(&mut buff)?;
             Ok($r#type::from_bits($bits_type::from_le_bytes(buff)))
         }
-        }
-        )*
+        )*}
     };
 }
 macro_rules! read_stream {
@@ -173,7 +170,17 @@ impl<R: Read, W: Write> Write for IpcStream<R, W> {
     }
 }
 
-impl IpcStream<BufReader<StdinLock<'static>>, BufWriter<StdoutLock<'static>>> {
+impl<R: Read, W: Write> BufRead for IpcStream<R, W> {
+    fn fill_buf(&mut self) -> Result<&[u8]> {
+        self.input_stream.fill_buf()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.input_stream.consume(amt)
+    }
+}
+
+impl IpcStream<StdinLock<'static>, StdoutLock<'static>> {
     #[inline]
     pub fn parent_stream() -> Self {
         Self {
@@ -183,7 +190,7 @@ impl IpcStream<BufReader<StdinLock<'static>>, BufWriter<StdoutLock<'static>>> {
     }
 }
 
-impl IpcStream<BufReader<ChildStdout>, BufWriter<ChildStdin>> {
+impl IpcStream<ChildStdout, ChildStdin> {
     #[inline]
     pub fn connect_to_child(child: &mut Child<>) -> Option<Self> {
         Some(Self {

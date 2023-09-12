@@ -1,4 +1,5 @@
 pub mod blocking;
-#[cfg(feature = "tokio")]
+#[cfg(any(feature = "tokio", docsrs))]
 #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 pub mod tokio;
+mod serde;
