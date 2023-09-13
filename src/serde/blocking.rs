@@ -2,26 +2,26 @@ use std::io;
 use std::io::{Read, Write};
 use crate::blocking::IpcStream as BlockingStream;
 
-
-
-pub trait Serde: ToOwned {
+pub trait BlockingSerde: ToOwned {
     fn write_to(&self, stream: &mut BlockingStream<impl Read, impl Write>) -> io::Result<()>;
     fn from_reader(stream: &mut BlockingStream<impl Read, impl Write>) -> io::Result<Self::Owned>;
 }
-impl Serde for str {
+impl BlockingSerde for str {
+    #[inline(always)]
     fn write_to(&self, stream: &mut BlockingStream<impl Read, impl Write>) -> io::Result<()> {
         stream.write_str(self)
     }
-
+    #[inline(always)]
     fn from_reader(stream: &mut BlockingStream<impl Read, impl Write>) -> io::Result<Self::Owned> {
         stream.read_string()
     }
 }
-impl Serde for [u8] {
+impl BlockingSerde for [u8] {
+    #[inline(always)]
     fn write_to(&self, stream: &mut BlockingStream<impl Read, impl Write>) -> io::Result<()> {
         stream.write_buf(self)
     }
-
+    #[inline(always)]
     fn from_reader(stream: &mut BlockingStream<impl Read, impl Write>) -> io::Result<Self::Owned> {
         stream.read_buff()
     }
@@ -30,11 +30,12 @@ impl Serde for [u8] {
 macro_rules! serde_primitive {
     ($($primitive: ty)*) => {
         paste::paste! {$(
-        impl Serde for $primitive {
+        impl BlockingSerde for $primitive {
+            #[inline(always)]
             fn write_to(&self, stream: &mut BlockingStream<impl Read, impl Write>) -> io::Result<()> {
                 stream.[<write_ $primitive>](*self)
             }
-
+            #[inline(always)]
             fn from_reader(stream: &mut BlockingStream<impl Read, impl Write>) -> io::Result<Self::Owned> {
                 stream.[<read_ $primitive>]()
             }

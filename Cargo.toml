@@ -15,4 +15,5 @@ tokio = ["dep:tokio"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"], optional = true }
+bytes = "1.4.0"
 paste = "1"

@@ -6,7 +6,7 @@ use std::{
         Result,
         Error as IoError,
         ErrorKind as IoErrorKind,
-    },
+    }
 };
 use tokio::{
     io::{
@@ -21,11 +21,11 @@ use tokio::{
         ChildStdin,
     }
 };
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader, BufWriter};
+use tokio::io::{AsyncBufRead, BufReader, BufWriter};
 
-pub struct IpcStream<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> {
-    input_stream: BufReader<R>,
-    output_stream: BufWriter<W>,
+pub struct IpcStream<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> {
+    pub(crate) read_stream: BufReader<R>,
+    pub(crate) write_stream: BufWriter<W>,
 }
 
 macro_rules! gen_int_rw {
@@ -51,21 +51,21 @@ macro_rules! gen_int_rw {
         #[inline(always)]
         pub async fn [<read_ $r#type>](&mut self) -> Result<$r#type> {
             let mut buff = [0; std::mem::size_of::<$r#type>()];
-            self.input_stream.read_exact(&mut buff).await?;
+            self.read_exact(&mut buff).await?;
             Ok($r#type::from_ne_bytes(buff))
         }
         #[doc = concat!("reads a ", stringify!($r#type), " in big-endian order from the underlying reader")]
         #[inline(always)]
         pub async fn [<read_ $r#type _be>](&mut self) -> Result<$r#type> {
             let mut buff = [0; std::mem::size_of::<$r#type>()];
-            self.input_stream.read_exact(&mut buff).await?;
+            self.read_exact(&mut buff).await?;
             Ok($r#type::from_be_bytes(buff))
         }
         #[doc = concat!("reads a ", stringify!($r#type), " in little-endian order from the underlying reader")]
         #[inline(always)]
         pub async fn [<read_ $r#type _le>](&mut self) -> Result<$r#type> {
             let mut buff = [0; std::mem::size_of::<$r#type>()];
-            self.input_stream.read_exact(&mut buff).await?;
+            self.read_exact(&mut buff).await?;
             Ok($r#type::from_le_bytes(buff))
         }
         )*}
@@ -95,7 +95,7 @@ macro_rules! gen_float_rw {
         pub async fn [<read_ $r#type>](&mut self) -> Result<$r#type> {
             // inlined for performance reasons
             let mut buff = [0; std::mem::size_of::<$bits_type>()];
-            self.input_stream.read_exact(&mut buff).await?;
+            self.read_exact(&mut buff).await?;
             Ok($r#type::from_bits($bits_type::from_ne_bytes(buff)))
         }
 
@@ -104,7 +104,7 @@ macro_rules! gen_float_rw {
         pub async fn [<read_ $r#type _be>](&mut self) -> Result<$r#type> {
             // inlined for performance reasons
             let mut buff = [0; std::mem::size_of::<$bits_type>()];
-            self.input_stream.read_exact(&mut buff).await?;
+            self.read_exact(&mut buff).await?;
             Ok($r#type::from_bits($bits_type::from_be_bytes(buff)))
         }
 
@@ -113,7 +113,7 @@ macro_rules! gen_float_rw {
         pub async fn [<read_ $r#type _le>](&mut self) -> Result<$r#type> {
             // inlined for performance reasons
             let mut buff = [0; std::mem::size_of::<$bits_type>()];
-            self.input_stream.read_exact(&mut buff).await?;
+            self.read_exact(&mut buff).await?;
             Ok($r#type::from_bits($bits_type::from_le_bytes(buff)))
         }
         )*}
@@ -161,39 +161,39 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> IpcStream<R, W> {
         read_stream!(self, read_to_string, String)
     }
 
-    gen_int_rw! {u64 u32 u16 u8 usize i64 i32 i16 i8 isize}
+    gen_int_rw! {u64 u32 u16 u8 usize i64 i32 i16 i8 isize  u128 i128}
     gen_float_rw! {f64 u64 f32 u32}
 }
 
-impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncRead for IpcStream<R, W> {
+impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> AsyncRead for IpcStream<R, W> {
     #[inline(always)]
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<Result<()>> {
-        Pin::new(&mut self.input_stream).poll_read(cx, buf)
+        Pin::new(&mut self.read_stream).poll_read(cx, buf)
     }
 }
 
-impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncWrite for IpcStream<R, W> {
+impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> AsyncWrite for IpcStream<R, W> {
     #[inline(always)]
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize>> {
-        Pin::new(&mut self.output_stream).poll_write(cx, buf)
+        Pin::new(&mut self.write_stream).poll_write(cx, buf)
     }
 
     #[inline(always)]
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
-        Pin::new(&mut self.output_stream).poll_flush(cx)
+        Pin::new(&mut self.write_stream).poll_flush(cx)
     }
 
     #[inline(always)]
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
-        Pin::new(&mut self.output_stream).poll_shutdown(cx)
+        Pin::new(&mut self.write_stream).poll_shutdown(cx)
     }
 
     #[inline(always)]
@@ -202,22 +202,24 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncWrite for IpcStream
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<Result<usize>> {
-        Pin::new(&mut self.output_stream).poll_write_vectored(cx, bufs)
+        Pin::new(&mut self.write_stream).poll_write_vectored(cx, bufs)
     }
 
     #[inline(always)]
     fn is_write_vectored(&self) -> bool {
-        self.output_stream.is_write_vectored()
+        self.write_stream.is_write_vectored()
     }
 }
 
-impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> AsyncBufRead for IpcStream<R, W> {
+impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> AsyncBufRead for IpcStream<R, W> {
     fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<&[u8]>> {
-        Pin::new(&mut self.input_stream).poll_fill_buf(cx)
+        let this = Pin::into_inner(self);
+        Pin::new(&mut this.read_stream).poll_fill_buf(cx)
     }
 
     fn consume(self: Pin<&mut Self>, amt: usize) {
-        Pin::new(&mut self.input_stream).consume(amt)
+        let this = Pin::into_inner(self);
+        Pin::new(&mut this.read_stream).consume(amt)
     }
 }
 
@@ -225,8 +227,8 @@ impl IpcStream<Stdin, Stdout> {
     #[inline]
     pub fn parent_stream() -> Self {
         Self {
-            input_stream:  BufReader::new(tokio::io::stdin() ),
-            output_stream: BufWriter::new(tokio::io::stdout())
+            read_stream:  BufReader::new(tokio::io::stdin() ),
+            write_stream: BufWriter::new(tokio::io::stdout())
         }
     }
 }
@@ -234,8 +236,8 @@ impl IpcStream<ChildStdout, ChildStdin> {
     #[inline]
     pub fn connect_to_child(child: &mut Child) -> Option<Self> {
         Some(Self {
-            input_stream:  BufReader::new(child.stdout.take()?),
-            output_stream: BufWriter::new(child.stdin .take()?)
+            read_stream:  BufReader::new(child.stdout.take()?),
+            write_stream: BufWriter::new(child.stdin .take()?)
         })
     }
 }
