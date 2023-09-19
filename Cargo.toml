@@ -9,11 +9,12 @@ repository = "https://github.com/NightMare-Vortex/ilgda-ipc"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-default = []
-tokio = ["dep:tokio"]
+[dependencies.simdutf8]
+version = "0.1.4"
+features = ["hints", "aarch64_neon", "aarch64_neon_prefetch"]
+path = "./crates/simdutf8"
 
 [dependencies]
-tokio = { version = "1", features = ["full"], optional = true }
-bytes = "1.4.0"
+tokio = { version = "1", features = ["full"] }
+bytemuck = { version = "1.14.0", features = ["must_cast", "min_const_generics"] }
 paste = "1"
