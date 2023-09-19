@@ -10,7 +10,7 @@ repository = "https://github.com/NightMare-Vortex/ilgda-ipc"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.simdutf8]
-version = "0.1.4"
+version = "0.1.5"
 features = ["hints", "aarch64_neon", "aarch64_neon_prefetch"]
 path = "./crates/simdutf8"
 
