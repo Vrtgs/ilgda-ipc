@@ -60,6 +60,10 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> IpcStream<R, W> {
         str.write_to(&mut self.write_stream)
     }
 
+    pub fn write<'a, T: AsyncSer<'a, BufWriter<W>>>(&'a mut self, value: &'a T) -> SerializeFuture<'a, T, BufWriter<W>> {
+        T::write_to(value, &mut self.write_stream)
+    }
+
     #[inline(always)]
     pub fn read_buf(&mut self) -> DeserializeFuture<[u8], BufReader<R>> {
         <[u8]>::read_from(&mut self.read_stream)
@@ -68,6 +72,10 @@ impl<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin> IpcStream<R, W> {
     #[inline(always)]
     pub fn read_str(&mut self) -> DeserializeFuture<str, BufReader<R>> {
         str::read_from(&mut self.read_stream)
+    }
+
+    pub fn read<'a, T: AsyncDe<'a, BufReader<R>>>(&'a mut self) -> DeserializeFuture<'a, T, BufReader<R>> {
+        T::read_from(&mut self.read_stream)
     }
 
     gen_rw! {
