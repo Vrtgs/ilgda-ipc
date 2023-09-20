@@ -6,13 +6,63 @@ use std::task::{Context, Poll};
 use std::marker::PhantomData;
 use tokio::io::{AsyncRead, ReadBuf};
 use crate::serde::{Stage, StagePoller};
-use crate::serde::sealed::{Primitive, ConstZeroed};
+use crate::serde::sealed::{Primitive};
 
 mod primitives {
     use std::io::ErrorKind::InvalidData;
+    use std::mem::MaybeUninit;
+    use bytemuck::{AnyBitPattern, NoUninit};
     use crate::debug_unreachable;
     use crate::serde::AsyncDe;
     use super::*;
+
+    fn uninit_vec<T>(len: usize) -> Vec<MaybeUninit<T>> {
+        let mut vec = Vec::<MaybeUninit<T>>::with_capacity(len);
+        // SAFETY: `MaybeUninit` allows being uninitialized
+        unsafe {
+            vec.set_len(len);
+        }
+        vec
+    }
+
+    struct Cast<A, B>(A, B);
+    impl<A, B> Cast<A, B> {
+        const ASSERT_ALIGN_GREATER_THAN_EQUAL: () =
+            assert!(std::mem::align_of::<A>() >= std::mem::align_of::<B>());
+        const ASSERT_SIZE_MULTIPLE_OF: () = assert!(
+            (std::mem::size_of::<A>() == 0) == (std::mem::size_of::<B>() == 0)
+                && (std::mem::size_of::<A>() % std::mem::size_of::<B>() == 0)
+        );
+    }
+
+    #[inline(always)]
+    fn must_cast_uninit_slice_mut<
+        A: NoUninit + AnyBitPattern,
+    >(a: &mut [MaybeUninit<A>]) -> &mut [MaybeUninit<u8>] {
+        #[allow(clippy::let_unit_value)]
+        let _ = Cast::<A, u8>::ASSERT_SIZE_MULTIPLE_OF;
+        #[allow(clippy::let_unit_value)]
+        let _ = Cast::<A, u8>::ASSERT_ALIGN_GREATER_THAN_EQUAL;
+
+
+        let new_len = if std::mem::size_of::<A>() == std::mem::size_of::<u8>() {
+            a.len()
+        } else {
+            a.len() * (std::mem::size_of::<A>() / std::mem::size_of::<u8>())
+        };
+        unsafe { core::slice::from_raw_parts_mut(a.as_mut_ptr().cast(), new_len) }
+    }
+
+    #[inline(always)]
+    unsafe fn assume_vec_innit<T>(uninit: Vec<MaybeUninit<T>>) -> Vec<T> {
+        let mut uninit = std::mem::ManuallyDrop::new(uninit);
+        let ptr = uninit.as_mut_ptr().cast();
+        let length = uninit.len();
+        let capacity = uninit.capacity();
+
+        Vec::from_raw_parts(ptr, length, capacity)
+    }
+
 
     macro_rules! deserializer {
     ($name:ident $ty:ty) => {
@@ -197,12 +247,12 @@ mod primitives {
 
 
     macro_rules! ready_up_data {
-        ($this: ident, $reader:expr, $cx: ident $(, x/$size: expr)?) => {
+        ($this: ident, $reader:expr, $cx: ident) => {
             match &mut $this.len_fut {
                 Stage::Pending(ft) => {
                     match Pin::new(ft).poll_stage($reader, $cx) {
                         Poll::Ready(Ok(done)) => {
-                            $this.data = vec![ConstZeroed::ZERO; done $(/$size)?];
+                            $this.data = uninit_vec(done);
                             $this.len_fut = Stage::Completed(done);
                         }
                         Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
@@ -217,7 +267,7 @@ mod primitives {
     #[must_use = "futures do nothing unless you `.await` or poll them"]
     pub struct DeserializeBytesStage<R: AsyncRead + Unpin> {
         len_fut: Stage<DeserializeUsizeStage<R>, R, usize, Error>,
-        data: Vec<u8>,
+        data: Vec<MaybeUninit<u8>>,
         filled: usize
     }
 
@@ -249,7 +299,7 @@ mod primitives {
             ready_up_data!(this, Pin::new(&mut *shared), cx);
 
             while this.filled < this.data.len() {
-                let mut buf = ReadBuf::new(&mut this.data[this.filled..]);
+                let mut buf = ReadBuf::uninit(&mut this.data[this.filled..]);
 
                 match Pin::new(&mut *shared).poll_read(cx, &mut buf) {
                     Poll::Ready(Ok(())) => match buf.filled::<>().len() {
@@ -262,14 +312,17 @@ mod primitives {
                 }
             }
 
-            Poll::Ready(Ok(std::mem::take(&mut this.data)))
+            Poll::Ready(Ok(unsafe {
+                // the condition above ensures we have initialized all bytes
+                assume_vec_innit(std::mem::take(&mut this.data))
+            }))
         }
     }
 
     #[must_use = "futures do nothing unless you `.await` or poll them"]
     pub struct DeserializePrimitiveSliceStage<T: Primitive, R: AsyncRead + Unpin> {
         len_fut: Stage<DeserializeUsizeStage<R>, R, usize, Error>,
-        data: Vec<T>,
+        data: Vec<MaybeUninit<T>>,
         filled: usize
     }
 
@@ -298,11 +351,11 @@ mod primitives {
 
             let shared = Pin::into_inner(shared);
 
-            ready_up_data!(this, Pin::new(&mut *shared), cx, x/std::mem::size_of::<T>());
+            ready_up_data!(this, Pin::new(&mut *shared), cx);
 
             while this.filled < this.data.len() * std::mem::size_of::<T>() {
-                let mut buf = ReadBuf::new(
-                    &mut bytemuck::must_cast_slice_mut(&mut this.data)[this.filled..]
+                let mut buf = ReadBuf::uninit(
+                    &mut must_cast_uninit_slice_mut(&mut this.data)[this.filled..]
                 );
 
                 match Pin::new(&mut *shared).poll_read(cx, &mut buf) {
@@ -316,7 +369,10 @@ mod primitives {
                 }
             }
 
-            Poll::Ready(Ok(std::mem::take(&mut this.data)))
+            Poll::Ready(Ok(unsafe {
+                // the condition above ensures we have initialized all bytes
+                assume_vec_innit(std::mem::take(&mut this.data))
+            }))
         }
     }
 

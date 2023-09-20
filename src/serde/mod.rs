@@ -4,9 +4,8 @@ pub mod ser;
 mod sealed {
     use bytemuck::{AnyBitPattern, NoUninit, Pod};
 
-    pub trait ConstZeroed {const ZERO: Self;}
-    pub trait Primitive: Pod + NoUninit + AnyBitPattern + Unpin + ConstZeroed {}
-    pub trait Byte: Pod + NoUninit + AnyBitPattern + Unpin + ConstZeroed {}
+    pub trait Primitive: Pod + NoUninit + AnyBitPattern + Unpin {}
+    pub trait Byte: Pod + NoUninit + AnyBitPattern + Unpin {}
 
     impl Byte for u8 {}
     impl Byte for i8 {}
@@ -25,24 +24,6 @@ mod sealed {
 
     impl Primitive for usize {}
     impl Primitive for isize {}
-
-    impl ConstZeroed for u8 {const ZERO: Self = 0;}
-    impl ConstZeroed for i8 {const ZERO: Self = 0;}
-
-    impl ConstZeroed for u16 {const ZERO: Self = 0;}
-    impl ConstZeroed for i16 {const ZERO: Self = 0;}
-
-    impl ConstZeroed for u32 {const ZERO: Self = 0;}
-    impl ConstZeroed for i32 {const ZERO: Self = 0;}
-
-    impl ConstZeroed for u64 {const ZERO: Self = 0;}
-    impl ConstZeroed for i64 {const ZERO: Self = 0;}
-
-    impl ConstZeroed for u128 {const ZERO: Self = 0;}
-    impl ConstZeroed for i128 {const ZERO: Self = 0;}
-
-    impl ConstZeroed for usize {const ZERO: Self = 0;}
-    impl ConstZeroed for isize {const ZERO: Self = 0;}
 }
 
 use std::future::Future;
