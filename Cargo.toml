@@ -1,10 +1,11 @@
 [package]
 name = "ilgda-ipc"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 description = "IPC standard used for ilgda"
 license = "MIT"
 authors = ["NightMare-Vortex"]
+repository = "https://github.com/NightMare-Vortex/ilgda-ipc"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
